@@ -346,6 +346,38 @@ class InventoryTurnoverForm(DateRangeForm):
     )
 
 
+class InventoryHistoryForm(DateRangeForm):
+    """用于出入库履历报表的表单"""
+    TRANSACTION_TYPE_CHOICES = [
+        ('', '全部类型'),
+        ('IN', '入库'),
+        ('OUT', '出库'),
+        ('ADJUST', '调整'),
+    ]
+
+    transaction_type = forms.ChoiceField(
+        label='交易类型',
+        choices=TRANSACTION_TYPE_CHOICES,
+        required=False,
+        widget=forms.Select(attrs={
+            'class': 'form-control form-select',
+            'aria-label': '交易类型',
+            'style': 'height: 48px; font-size: 16px;'
+        })
+    )
+
+    search = forms.CharField(
+        label='商品搜索',
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '商品名称或条码',
+            'aria-label': '商品搜索',
+            'style': 'height: 48px; font-size: 16px;'
+        })
+    )
+
+
 # 添加缺失的表单类
 class ReportFilterForm(DateRangeForm):
     """通用报表筛选表单，继承DateRangeForm并添加分类和门店筛选"""

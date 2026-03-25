@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 
-from .forms import DateRangeForm, TopProductsForm, InventoryTurnoverForm
+from .forms import DateRangeForm, TopProductsForm, InventoryTurnoverForm, InventoryHistoryForm
 from .services.report_service import ReportService
 from .services.export_service import ExportService
 from .utils.logging import log_view_access
@@ -354,4 +354,71 @@ def operation_log_report(request):
             'log_data': log_data,
             'start_date': start_date,
             'end_date': end_date
-        }) 
+        })
+
+@login_required
+@log_view_access('OTHER')
+@permission_required('view_reports')
+def inventory_history_report(request):
+    """
+    出入库履历报表视图（聚合分析 + 履历明细）
+    """
+    from django.core.paginator import Paginator
+
+    if request.method == 'POST':
+        form = InventoryHistoryForm(request.POST)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            transaction_type = form.cleaned_data.get('transaction_type', '')
+            search = form.cleaned_data.get('search', '')
+
+            # 获取数据
+            report_data = ReportService.get_inventory_history(
+                start_date=start_date,
+                end_date=end_date,
+                transaction_type=transaction_type or None,
+                search=search or None,
+            )
+
+            # 处理 Excel 导出
+            if 'export_excel' in request.POST:
+                return ExportService.export_inventory_history(
+                    report_data['transactions'], start_date, end_date
+                )
+
+            # 分页
+            paginator = Paginator(report_data['transactions'], 20)
+            page_number = request.POST.get('page', 1)
+            page_obj = paginator.get_page(page_number)
+
+            return render(request, 'inventory/reports/inventory_history.html', {
+                'form': form,
+                'report_data': report_data,
+                'page_obj': page_obj,
+                'start_date': start_date,
+                'end_date': end_date,
+            })
+    else:
+        form = InventoryHistoryForm()
+
+        # 默认最近30天
+        start_date = timezone.now().date() - timedelta(days=30)
+        end_date = timezone.now().date()
+
+        report_data = ReportService.get_inventory_history(
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        paginator = Paginator(report_data['transactions'], 20)
+        page_number = request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+
+        return render(request, 'inventory/reports/inventory_history.html', {
+            'form': form,
+            'report_data': report_data,
+            'page_obj': page_obj,
+            'start_date': start_date,
+            'end_date': end_date,
+        })

@@ -217,4 +217,26 @@ class ExportService:
         )
         response['Content-Disposition'] = f'attachment; filename="会员分析报表_{date_str}.xlsx"'
         
-        return response 
+        return response
+
+    @staticmethod
+    def export_inventory_history(transactions, start_date, end_date):
+        """
+        导出出入库履历明细为 Excel
+        """
+        TYPE_MAP = {'IN': '入库', 'OUT': '出库', 'ADJUST': '调整'}
+        data = []
+        for tx in transactions:
+            data.append({
+                '交易时间': tx.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                '商品名称': tx.product.name,
+                '商品条码': tx.product.barcode,
+                '交易类型': TYPE_MAP.get(tx.transaction_type, tx.transaction_type),
+                '数量': tx.quantity,
+                '操作员': tx.operator.username,
+                '备注': tx.notes or '',
+            })
+
+        date_str = datetime.datetime.now().strftime('%Y%m%d')
+        filename = f'出入库履历_{start_date}_{end_date}_{date_str}.xlsx'
+        return ExportService.export_to_excel(data, filename, sheet_name='出入库履历')

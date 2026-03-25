@@ -3,7 +3,7 @@ Report generation and data analysis services.
 """
 from datetime import datetime, timedelta
 from decimal import Decimal
-from django.db.models import Sum, Count, F, Q, Avg, ExpressionWrapper, FloatField, DecimalField
+from django.db.models import Sum, Count, F, Q, Avg, ExpressionWrapper, FloatField, DecimalField, Case, When, IntegerField
 from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
 from django.utils import timezone
 
@@ -478,4 +478,123 @@ class ReportService:
             'logs': logs,
             'operation_type_stats': operation_type_stats,
             'operator_stats': operator_stats
-        } 
+        }
+
+    @staticmethod
+    def get_inventory_history(start_date=None, end_date=None, transaction_type=None, search=None):
+        """
+        获取出入库履历数据（聚合分析 + 明细）
+
+        Args:
+            start_date: 开始日期
+            end_date: 结束日期
+            transaction_type: 交易类型筛选 (IN/OUT/ADJUST/空=全部)
+            search: 商品名称或条码搜索
+
+        Returns:
+            dict: 包含 summary, daily_trend, product_summary, operator_summary, transactions
+        """
+        if not start_date:
+            start_date = timezone.now().date() - timedelta(days=30)
+        if not end_date:
+            end_date = timezone.now().date()
+
+        # 日期范围（包含结束日期全天）
+        start_datetime = datetime.combine(start_date, datetime.min.time())
+        end_datetime = datetime.combine(end_date, datetime.max.time())
+
+        # 基础查询
+        base_qs = InventoryTransaction.objects.filter(
+            created_at__range=(start_datetime, end_datetime)
+        ).select_related('product', 'operator')
+
+        if transaction_type:
+            base_qs = base_qs.filter(transaction_type=transaction_type)
+
+        if search:
+            base_qs = base_qs.filter(
+                Q(product__name__icontains=search) |
+                Q(product__barcode__icontains=search)
+            )
+
+        # 1. 汇总统计
+        summary_qs = base_qs.aggregate(
+            total_in_quantity=Sum(
+                Case(When(transaction_type='IN', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            total_out_quantity=Sum(
+                Case(When(transaction_type='OUT', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            total_adjust_quantity=Sum(
+                Case(When(transaction_type='ADJUST', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            transaction_count=Count('id'),
+        )
+        summary = {
+            'total_in_quantity': summary_qs['total_in_quantity'] or 0,
+            'total_out_quantity': summary_qs['total_out_quantity'] or 0,
+            'total_adjust_quantity': summary_qs['total_adjust_quantity'] or 0,
+            'net_change': (summary_qs['total_in_quantity'] or 0) - (summary_qs['total_out_quantity'] or 0),
+            'transaction_count': summary_qs['transaction_count'] or 0,
+        }
+
+        # 2. 按日趋势（不受 transaction_type 筛选影响，始终显示全部类型对比）
+        trend_base = InventoryTransaction.objects.filter(
+            created_at__range=(start_datetime, end_datetime)
+        )
+        if search:
+            trend_base = trend_base.filter(
+                Q(product__name__icontains=search) |
+                Q(product__barcode__icontains=search)
+            )
+
+        daily_trend = trend_base.annotate(
+            day=TruncDay('created_at')
+        ).values('day').annotate(
+            in_quantity=Sum(
+                Case(When(transaction_type='IN', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            out_quantity=Sum(
+                Case(When(transaction_type='OUT', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            adjust_quantity=Sum(
+                Case(When(transaction_type='ADJUST', then='quantity'), default=0, output_field=IntegerField())
+            ),
+        ).order_by('day')
+
+        # 3. 按商品汇总
+        product_summary = base_qs.values(
+            'product__id', 'product__name', 'product__barcode'
+        ).annotate(
+            in_quantity=Sum(
+                Case(When(transaction_type='IN', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            out_quantity=Sum(
+                Case(When(transaction_type='OUT', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            adjust_quantity=Sum(
+                Case(When(transaction_type='ADJUST', then='quantity'), default=0, output_field=IntegerField())
+            ),
+            total_count=Count('id'),
+        ).order_by('-total_count')
+
+        # 4. 按操作员统计
+        operator_summary = base_qs.values(
+            'operator__username'
+        ).annotate(
+            count=Count('id'),
+            in_count=Count('id', filter=Q(transaction_type='IN')),
+            out_count=Count('id', filter=Q(transaction_type='OUT')),
+            adjust_count=Count('id', filter=Q(transaction_type='ADJUST')),
+        ).order_by('-count')
+
+        # 5. 明细列表（按时间倒序）
+        transactions = base_qs.order_by('-created_at')
+
+        return {
+            'summary': summary,
+            'daily_trend': daily_trend,
+            'product_summary': product_summary,
+            'operator_summary': operator_summary,
+            'transactions': transactions,
+        }

@@ -9,7 +9,7 @@ from .inventory_forms import InventoryTransactionForm
 from .sales_forms import SaleForm, SaleItemForm
 from .report_forms import (
     DateRangeForm, TopProductsForm, InventoryTurnoverForm,
-    ReportFilterForm, SalesReportForm
+    ReportFilterForm, SalesReportForm, InventoryHistoryForm
 )
 from .system_forms import SystemConfigForm, StoreForm
 
@@ -46,7 +46,7 @@ __all__ = [
     
     # 报表表单
     'DateRangeForm', 'TopProductsForm', 'InventoryTurnoverForm',
-    'ReportFilterForm', 'SalesReportForm',
+    'ReportFilterForm', 'SalesReportForm', 'InventoryHistoryForm',
     
     # 系统配置表单
     'SystemConfigForm', 'StoreForm',

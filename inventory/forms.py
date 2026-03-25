@@ -23,7 +23,7 @@ from inventory.forms.sales_forms import (
 )
 
 from inventory.forms.report_forms import (
-    DateRangeForm, TopProductsForm, InventoryTurnoverForm
+    DateRangeForm, TopProductsForm, InventoryTurnoverForm, InventoryHistoryForm
 )
 
 from inventory.forms_batch import (
