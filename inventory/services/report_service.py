@@ -478,4 +478,40 @@ class ReportService:
             'logs': logs,
             'operation_type_stats': operation_type_stats,
             'operator_stats': operator_stats
-        } 
+        }
+
+    @staticmethod
+    def get_inventory_modification_records(start_date=None, end_date=None, transaction_type=None, product=None):
+        """
+        Get inventory modification records (transactions) for the given period.
+
+        Args:
+            start_date: Optional start date for filtering
+            end_date: Optional end date for filtering
+            transaction_type: Optional transaction type for filtering ('IN', 'OUT', 'ADJUST')
+            product: Optional product for filtering
+
+        Returns:
+            QuerySet: Inventory transactions
+        """
+        if not start_date:
+            start_date = timezone.now() - timedelta(days=30)
+        if not end_date:
+            end_date = timezone.now()
+
+        # Time period inclusive of end day
+        end_date_inclusive = end_date + timedelta(days=1)
+
+        # Base query
+        query = InventoryTransaction.objects.select_related('product', 'operator', 'product__category').filter(
+            created_at__range=(start_date, end_date_inclusive)
+        ).order_by('-created_at')
+
+        # Apply filters
+        if transaction_type:
+            query = query.filter(transaction_type=transaction_type)
+
+        if product:
+            query = query.filter(product=product)
+
+        return query

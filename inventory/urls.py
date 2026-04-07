@@ -115,6 +115,7 @@ urlpatterns = [
     path('reports/birthday-members/', sales_views.birthday_members_report, name='birthday_members_report'),
     path('reports/recharge/', views_report.recharge_report, name='recharge_report'),
     path('reports/operation-logs/', views_report.operation_log_report, name='operation_log_report'),
+    path('reports/inventory-modification-record/', views_report.inventory_modification_record_report, name='inventory_modification_record_report'),
     
     # 销售明细路径
     path('sales/<int:sale_id>/', sales_views.sale_detail, name='sale_detail'),

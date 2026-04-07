@@ -346,6 +346,26 @@ class InventoryTurnoverForm(DateRangeForm):
     )
 
 
+from inventory.models import InventoryTransaction, Product
+
+class InventoryModificationRecordForm(DateRangeForm):
+    """用于库存修改记录报表的表单"""
+
+    transaction_type = forms.ChoiceField(
+        label='修改类型',
+        choices=[('', '所有类型')] + InventoryTransaction.TRANSACTION_TYPES,
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control form-select'})
+    )
+
+    product = forms.ModelChoiceField(
+        label='商品',
+        queryset=Product.objects.all(),
+        required=False,
+        empty_label="所有商品",
+        widget=forms.Select(attrs={'class': 'form-control form-select'})
+    )
+
 # 添加缺失的表单类
 class ReportFilterForm(DateRangeForm):
     """通用报表筛选表单，继承DateRangeForm并添加分类和门店筛选"""
