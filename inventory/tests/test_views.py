@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth.models import User, Permission, Group
@@ -62,7 +65,7 @@ class ViewTestCase(TestCase):
         # 创建会员等级
         self.member_level = MemberLevel.objects.create(
             name='普通会员',
-            discount=95,  # 95%
+            discount=Decimal('0.95'),  # 95%
             points_threshold=0,
             color='#FF5733'
         )
@@ -165,6 +168,34 @@ class InventoryViewTest(ViewTestCase):
         self.inventory.refresh_from_db()
         self.assertEqual(self.inventory.quantity, 150)  # 100 + 50
 
+
+class MemberApiViewTest(ViewTestCase):
+    """测试会员相关 API 视图"""
+
+    def test_member_search_requires_login(self):
+        """未登录用户不能通过手机号查询会员隐私信息"""
+        url = reverse('member_search_by_phone', args=[self.member.phone])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response['Location'])
+        self.assertIn('next=', response['Location'])
+
+    def test_member_search_returns_data_for_authenticated_user(self):
+        """登录用户仍可使用会员搜索 API"""
+        self.client.login(username='testuser', password='12345')
+        url = reverse('member_search_by_phone', args=[self.member.phone])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['member_id'], self.member.id)
+        self.assertEqual(data['member_phone'], self.member.phone)
+
+
 class SaleViewTest(ViewTestCase):
     """测试销售相关视图"""
     
@@ -204,3 +235,35 @@ class SaleViewTest(ViewTestCase):
         
         # 验证重定向到销售项创建页面
         self.assertRedirects(response, reverse('sale_item_create', args=[sale.id]))
+
+
+class BackupViewSecurityTest(TestCase):
+    """备份管理视图的安全回归测试"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_superuser(
+            username='backup-admin',
+            password='backup-pass',
+            email='backup@example.com'
+        )
+        self.client.force_login(self.user)
+
+        self.temp_parent = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_parent.cleanup)
+        self.backup_root = os.path.join(self.temp_parent.name, 'backups')
+        self.temp_dir = os.path.join(self.temp_parent.name, 'temp')
+        os.makedirs(self.backup_root, exist_ok=True)
+        os.makedirs(self.temp_dir, exist_ok=True)
+
+    def test_delete_backup_rejects_parent_directory_traversal(self):
+        sentinel_path = os.path.join(self.temp_parent.name, 'keep.txt')
+        with open(sentinel_path, 'w', encoding='utf-8') as sentinel:
+            sentinel.write('do not delete')
+
+        with self.settings(BACKUP_ROOT=self.backup_root, TEMP_DIR=self.temp_dir):
+            response = self.client.post('/system/backup/delete/../', {'confirm': 'on'})
+
+        self.assertRedirects(response, reverse('backup_list'))
+        self.assertTrue(os.path.exists(sentinel_path))
+        self.assertTrue(os.path.isdir(self.backup_root))
