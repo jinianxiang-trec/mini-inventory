@@ -1,0 +1,149 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}库存修改记录查询 - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="card-title mb-0">库存修改记录查询</h2>
+                        <p class="text-muted">查看指定时间段内、特定类型的库存变更记录</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="{% url 'inventory_modification_record_report' %}" class="row g-3">
+                    {% csrf_token %}
+
+                    <div class="col-md-3">
+                        {{ form.date_range_preset.label_tag }}
+                        {{ form.date_range_preset }}
+                    </div>
+
+                    <div class="col-md-3">
+                        {{ form.start_date.label_tag }}
+                        {{ form.start_date }}
+                    </div>
+
+                    <div class="col-md-3">
+                        {{ form.end_date.label_tag }}
+                        {{ form.end_date }}
+                    </div>
+
+                    <div class="col-md-3">
+                        {{ form.transaction_type.label_tag }}
+                        {{ form.transaction_type }}
+                    </div>
+
+                    <div class="col-md-3">
+                        {{ form.product.label_tag }}
+                        {{ form.product }}
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-search me-1"></i> 查询
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title mb-4">记录详情</h5>
+
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>时间</th>
+                                <th>商品</th>
+                                <th>类型</th>
+                                <th>数量</th>
+                                <th>操作员</th>
+                                <th>备注</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for record in records %}
+                            <tr>
+                                <td>{{ record.created_at|date:"Y-m-d H:i:s" }}</td>
+                                <td>{{ record.product.name }} <br><small class="text-muted">{{ record.product.barcode }}</small></td>
+                                <td>
+                                    {% if record.transaction_type == 'IN' %}
+                                    <span class="badge bg-success">入库</span>
+                                    {% elif record.transaction_type == 'OUT' %}
+                                    <span class="badge bg-danger">出库</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">调整</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if record.transaction_type == 'OUT' %}
+                                    <span class="text-danger fw-bold">-{{ record.quantity }}</span>
+                                    {% else %}
+                                    <span class="text-success fw-bold">+{{ record.quantity }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ record.operator.username }}</td>
+                                <td>{{ record.notes|default:"-" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="d-flex flex-column align-items-center">
+                                        <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                        <p class="mt-2 mb-0">没有找到符合条件的记录</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle date preset changes
+        const presetSelect = document.getElementById('{{ form.date_range_preset.id_for_label }}');
+
+        if (presetSelect) {
+            presetSelect.addEventListener('change', function() {
+                // If a preset is selected (not custom), we can auto-submit or just let the user see the dates
+                // The actual date calculation for preset is done in the backend form clean method,
+                // but for UX we might want to update the inputs via JS.
+                // For simplicity, we just submit the form when a preset is selected if it's not 'custom'
+                if (this.value && this.value !== 'custom') {
+                    // Disable start/end date inputs so backend uses preset
+                    document.getElementById('{{ form.start_date.id_for_label }}').disabled = true;
+                    document.getElementById('{{ form.end_date.id_for_label }}').disabled = true;
+                    this.closest('form').submit();
+                } else if (this.value === 'custom') {
+                    // Enable them
+                    document.getElementById('{{ form.start_date.id_for_label }}').disabled = false;
+                    document.getElementById('{{ form.end_date.id_for_label }}').disabled = false;
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

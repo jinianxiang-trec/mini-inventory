@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 from datetime import datetime, timedelta
 
-from .forms import DateRangeForm, TopProductsForm, InventoryTurnoverForm
+from .forms.report_forms import DateRangeForm, TopProductsForm, InventoryTurnoverForm, InventoryModificationRecordForm
 from .services.report_service import ReportService
 from .services.export_service import ExportService
 from .utils.logging import log_view_access
@@ -354,4 +354,78 @@ def operation_log_report(request):
             'log_data': log_data,
             'start_date': start_date,
             'end_date': end_date
-        }) 
+        })
+
+@login_required
+@log_view_access('OTHER')
+@permission_required('view_reports')
+def inventory_modification_record_report(request):
+    """
+    Inventory modification record report view.
+    """
+    # 允许从GET请求中接收产品ID作为初始值
+    initial_data = {}
+    if request.method == 'GET' and 'product' in request.GET:
+        initial_data['product'] = request.GET.get('product')
+
+    if request.method == 'POST':
+        form = InventoryModificationRecordForm(request.POST)
+        if form.is_valid():
+            start_date = form.cleaned_data['start_date']
+            end_date = form.cleaned_data['end_date']
+            transaction_type = form.cleaned_data.get('transaction_type')
+            product = form.cleaned_data.get('product')
+
+            # 获取记录数据
+            records = ReportService.get_inventory_modification_records(
+                start_date=start_date,
+                end_date=end_date,
+                transaction_type=transaction_type,
+                product=product
+            )
+
+            return render(request, 'inventory/reports/inventory_modification_record.html', {
+                'form': form,
+                'records': records,
+                'start_date': start_date,
+                'end_date': end_date
+            })
+        else:
+            # Add a fallback for invalid form
+            start_date = timezone.now().date() - timedelta(days=30)
+            end_date = timezone.now().date()
+            return render(request, 'inventory/reports/inventory_modification_record.html', {
+                'form': form,
+                'records': [],
+                'start_date': start_date,
+                'end_date': end_date
+            })
+    else:
+        form = InventoryModificationRecordForm(initial=initial_data)
+
+        # 默认显示最近30天的记录
+        start_date = timezone.now().date() - timedelta(days=30)
+        end_date = timezone.now().date()
+
+        # 应用初始值
+        product = initial_data.get('product')
+        if product:
+            try:
+                from inventory.models import Product
+                product = Product.objects.get(id=product)
+            except (Product.DoesNotExist, ValueError):
+                product = None
+
+        # 获取记录数据
+        records = ReportService.get_inventory_modification_records(
+            start_date=start_date,
+            end_date=end_date,
+            product=product
+        )
+
+        return render(request, 'inventory/reports/inventory_modification_record.html', {
+            'form': form,
+            'records': records,
+            'start_date': start_date,
+            'end_date': end_date
+        })
